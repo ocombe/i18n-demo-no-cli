@@ -302,7 +302,7 @@ module.exports = function(env) {
     config.plugins.push(new ExtractI18nPlugin({
       // fix for bug https://github.com/angular/angular/issues/19198 until it is merged into the main branch of the cli
       // we must use a specific config file to set the "outDir" option which overwrites the "genDir" option below
-      "tsConfigPath": "src\\tsconfig.extract.json",
+      "tsConfigPath": "src\\tsconfig.app.json",
       "exclude": [],
       "i18nFormat": env.i18nOutFormat,
       "locale": env.locale,
