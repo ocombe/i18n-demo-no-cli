@@ -5,21 +5,21 @@
       <trans-unit id="7b20568b5e92925dbd6551ceba21c87fc6460198" datatype="html">
         <source>Welcome to <x id="INTERPOLATION" equiv-text="{{title}}"/>!</source>
         <context-group purpose="location">
-          <context context-type="sourcefile">app\app.component.ts</context>
+          <context context-type="sourcefile">app/app.component.ts</context>
           <context context-type="linenumber">4</context>
         </context-group>
       </trans-unit>
       <trans-unit id="70214618fbda172c4d710a73364169a6e43a5dd7" datatype="html">
         <source>The application is using the locale <x id="INTERPOLATION" equiv-text="{{locale}}"/></source>
         <context-group purpose="location">
-          <context context-type="sourcefile">app\app.component.ts</context>
+          <context context-type="sourcefile">app/app.component.ts</context>
           <context context-type="linenumber">5</context>
         </context-group>
       </trans-unit>
       <trans-unit id="b233f90b631ed6e9e2eec22608ff4efc8683586b" datatype="html">
         <source>Localized date: <x id="INTERPOLATION" equiv-text="{{date | date:&apos;full&apos;}}"/></source>
         <context-group purpose="location">
-          <context context-type="sourcefile">app\app.component.ts</context>
+          <context context-type="sourcefile">app/app.component.ts</context>
           <context context-type="linenumber">8</context>
         </context-group>
       </trans-unit>

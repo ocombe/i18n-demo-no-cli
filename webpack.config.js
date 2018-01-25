@@ -8,11 +8,11 @@ const HtmlWebpackPlugin = require('html-webpack-plugin');
 const autoprefixer = require('autoprefixer');
 const postcssUrl = require('postcss-url');
 const cssnano = require('cssnano');
-const customProperties = require('postcss-custom-properties');
+const postcssImports = require('postcss-import');
 const {NoEmitOnErrorsPlugin, SourceMapDevToolPlugin, NamedModulesPlugin} = require('webpack');
 const {NamedLazyChunksWebpackPlugin, BaseHrefWebpackPlugin} = require('@angular/cli/plugins/webpack');
 const {CommonsChunkPlugin} = require('webpack').optimize;
-const {AngularCompilerPlugin, ExtractI18nPlugin} = require('@ngtools/webpack');
+const {AngularCompilerPlugin} = require('@ngtools/webpack');
 const ENV_CONFIG = require('./env.conf.json');
 
 const nodeModules = path.join(process.cwd(), 'node_modules');
@@ -22,9 +22,9 @@ const entryPoints = ["inline", "polyfills", "sw-register", "styles", "vendor", "
 const minimizeCss = false;
 const baseHref = "";
 const deployUrl = "";
-const postcssPlugins = function() {
+const postcssPlugins = function (loader) {
   // safe settings based on: https://github.com/ben-eb/cssnano/issues/358#issuecomment-283696193
-  const importantCommentRe = /@preserve|@license|[@#]\s*source(?:Mapping)?URL|^!/i;
+  const importantCommentRe = /@preserve|@licen[cs]e|[@#]\s*source(?:Mapping)?URL|^!/i;
   const minimizeOptions = {
     autoprefixer: false,
     safe: true,
@@ -32,34 +32,72 @@ const postcssPlugins = function() {
     discardComments: {remove: (comment) => !importantCommentRe.test(comment)}
   };
   return [
-    postcssUrl({
-      url: (URL) => {
-        // Only convert root relative URLs, which CSS-Loader won't process into require().
-        if(!URL.startsWith('/') || URL.startsWith('//')) {
-          return URL;
-        }
-        if(deployUrl.match(/:\/\//)) {
-          // If deployUrl contains a scheme, ignore baseHref use deployUrl as is.
-          return `${deployUrl.replace(/\/$/, '')}${URL}`;
-        }
-        else if(baseHref.match(/:\/\//)) {
-          // If baseHref contains a scheme, include it as is.
-          return baseHref.replace(/\/$/, '') +
-            `/${deployUrl}/${URL}`.replace(/\/\/+/g, '/');
-        }
-        else {
-          // Join together base-href, deploy-url and the original URL.
-          // Also dedupe multiple slashes into single ones.
-          return `/${baseHref}/${deployUrl}/${URL}`.replace(/\/\/+/g, '/');
-        }
+    postcssImports({
+      resolve: (url, context) => {
+        return new Promise((resolve, reject) => {
+          loader.resolve(context, url, (err, result) => {
+            if (err) {
+              reject(err);
+              return;
+            }
+            resolve(result);
+          });
+        });
+      },
+      load: (filename) => {
+        return new Promise((resolve, reject) => {
+          loader.fs.readFile(filename, (err, data) => {
+            if (err) {
+              reject(err);
+              return;
+            }
+            const content = data.toString();
+            resolve(content);
+          });
+        });
       }
     }),
+    postcssUrl({
+      filter: ({url}) => url.startsWith('~'),
+      url: ({url}) => {
+        const fullPath = path.join(projectRoot, 'node_modules', url.substr(1));
+        return path.relative(loader.context, fullPath).replace(/\\/g, '/');
+      }
+    }),
+    postcssUrl([
+      {
+        // Only convert root relative URLs, which CSS-Loader won't process into require().
+        filter: ({url}) => url.startsWith('/') && !url.startsWith('//'),
+        url: ({url}) => {
+          if (deployUrl.match(/:\/\//) || deployUrl.startsWith('/')) {
+            // If deployUrl is absolute or root relative, ignore baseHref & use deployUrl as is.
+            return `${deployUrl.replace(/\/$/, '')}${url}`;
+          }
+          else if (baseHref.match(/:\/\//)) {
+            // If baseHref contains a scheme, include it as is.
+            return baseHref.replace(/\/$/, '') +
+              `/${deployUrl}/${url}`.replace(/\/\/+/g, '/');
+          }
+          else {
+            // Join together base-href, deploy-url and the original URL.
+            // Also dedupe multiple slashes into single ones.
+            return `/${baseHref}/${deployUrl}/${url}`.replace(/\/\/+/g, '/');
+          }
+        }
+      },
+      {
+        // TODO: inline .cur if not supporting IE (use browserslist to check)
+        filter: (asset) => !asset.hash && !asset.absolutePath.endsWith('.cur'),
+        url: 'inline',
+        // NOTE: maxSize is in KB
+        maxSize: 10
+      }
+    ]),
     autoprefixer(),
-    customProperties({preserve: true})
   ].concat(minimizeCss ? [cssnano(minimizeOptions)] : []);
 };
 
-module.exports = function(env) {
+module.exports = function (env) {
   env = Object.assign({}, ENV_CONFIG, env);
 
   const config = {
@@ -218,10 +256,10 @@ module.exports = function(env) {
         "chunksSortMode": function sort(left, right) {
           let leftIndex = entryPoints.indexOf(left.names[0]);
           let rightindex = entryPoints.indexOf(right.names[0]);
-          if(leftIndex > rightindex) {
+          if (leftIndex > rightindex) {
             return 1;
           }
-          else if(leftIndex < rightindex) {
+          else if (leftIndex < rightindex) {
             return -1;
           }
           else {
@@ -269,17 +307,6 @@ module.exports = function(env) {
       new DefinePlugin({
         // define a global "ENV" variable that we can use in the app, it contains the --env option from the npm command
         'ENV': JSON.stringify(env)
-      }),
-      new AngularCompilerPlugin({
-        "mainPath": "main.ts",
-        "i18nInFile": env.locale && env.locale !== env.defaultLang ? `src/i18n/messages.${env.locale}.xlf` : null,
-        "locale": env.locale || env.defaultLang,
-        "platform": 0,
-        "sourceMap": true,
-        "exclude": [],
-        "tsConfigPath": "src\\tsconfig.app.json",
-        "compilerOptions": {},
-        "skipCodeGeneration": !env.aot // skip == no aot
       })
     ],
     "node": {
@@ -298,17 +325,51 @@ module.exports = function(env) {
     }
   };
 
-  if(env.extract) {
-    config.plugins.push(new ExtractI18nPlugin({
-      // fix for bug https://github.com/angular/angular/issues/19198 until it is merged into the main branch of the cli
-      // we must use a specific config file to set the "outDir" option which overwrites the "genDir" option below
-      "tsConfigPath": "src\\tsconfig.app.json",
-      "exclude": [],
-      "i18nFormat": env.i18nOutFormat,
+  if (env.extract) {
+    function getI18nOutfile(format) {
+      switch (format) {
+        case 'xmb':
+          return 'messages.xmb';
+        case 'xlf':
+        case 'xlif':
+        case 'xliff':
+        case 'xlf2':
+        case 'xliff2':
+          return 'messages.xlf';
+        default:
+          throw new Error(`Unsupported format "${format}"`);
+      }
+    }
+
+    const outFormat = env.i18nOutFormat || 'xlf';
+    let outFile = env.outFile || getI18nOutfile(outFormat);
+    if(env.outputPath) {
+      outFile = path.join(env.outputPath, outFile);
+    }
+
+    config.plugins.push(new AngularCompilerPlugin({
+      "mainPath": "main.ts",
+      "i18nOutFile": outFile,
+      "i18nOutFormat": outFormat,
       "locale": env.locale,
-      "outFile": env.outFile,
-      // this is ignored in Angular v5 until the bug explained above is fixed
-      "genDir": env.outputPath
+      "platform": 0,
+      "sourceMap": true,
+      "exclude": [],
+      "tsConfigPath": "src\\tsconfig.app.json",
+      "compilerOptions": {},
+      "skipCodeGeneration": !env.aot // skip == no aot
+    }));
+  } else {
+    config.plugins.push(new AngularCompilerPlugin({
+      "mainPath": "main.ts",
+      "i18nInFile": env.locale && env.locale !== env.defaultLang ? `src/i18n/messages.${env.locale}.xlf` : null,
+      "locale": env.locale || env.defaultLang,
+      "platform": 0,
+      "sourceMap": true,
+      "exclude": [],
+      "tsConfigPath": "src\\tsconfig.app.json",
+      "compilerOptions": {},
+      "skipCodeGeneration": !env.aot // skip == no aot
     }));
   }
 
