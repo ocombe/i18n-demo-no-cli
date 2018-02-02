@@ -355,7 +355,7 @@ module.exports = function (env) {
       "platform": 0,
       "sourceMap": true,
       "exclude": [],
-      "tsConfigPath": "src\\tsconfig.app.json",
+      "tsConfigPath": "src/tsconfig.app.json",
       "compilerOptions": {},
       "skipCodeGeneration": !env.aot // skip == no aot
     }));
@@ -367,7 +367,7 @@ module.exports = function (env) {
       "platform": 0,
       "sourceMap": true,
       "exclude": [],
-      "tsConfigPath": "src\\tsconfig.app.json",
+      "tsConfigPath": "src/tsconfig.app.json",
       "compilerOptions": {},
       "skipCodeGeneration": !env.aot // skip == no aot
     }));
